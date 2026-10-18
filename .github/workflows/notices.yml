@@ -1,0 +1,42 @@
+name: Blue Archive official notices
+
+on:
+  schedule:
+    - cron: '23,53 * * * *'
+  workflow_dispatch:
+    inputs:
+      send_test:
+        description: Send one connection test with the Blue Archive role mention
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bluearchive-notice-relay
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Korean and Japanese official notices
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SEND_TEST: ${{ inputs.send_test }}
+        run: node notifier.mjs
+      - name: Save delivery history even after partial failure
+        if: always()
+        run: |
+          if [ -f state.json ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add state.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Update official notice delivery history'
+              git push
+            fi
+          fi
