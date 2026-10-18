@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SOURCES, ROLE_ID, parseItems, pendingItems, payload, postDiscord} from './notifier.mjs';
+import {SOURCES, ROLE_ID, parseItems, pendingItems, payload, postDiscord, htmlToText, excerpt, translateJapanese} from './notifier.mjs';
 
 test('Japanese headline uses summary, not category label', () => {
   const [item] = parseItems(SOURCES.at(-1), {meta:{ok:true},data:{rows:[{id:9,title:'メンテナンス',summary:'Maintenance date',publishTime:1000}]}});
@@ -12,9 +12,19 @@ test('old, seen and repeated records do not notify; new records sort chronologic
   assert.deepEqual(pendingItems(items, {startedAt:30,seen:['2']}).map(x=>x.id), ['3','4']);
 });
 test('only the requested role can be pinged, including hostile headline text', () => {
-  const body = payload(SOURCES[0], {title:'@everyone <@123> notice',url:'https://forum.nexon.com/',published:1000});
+  const body = payload(SOURCES[0], {displayTitle:'@everyone <@123> notice',body:'@here body',url:'https://forum.nexon.com/',published:1000});
   assert.deepEqual(body.allowed_mentions, {parse:[],roles:[ROLE_ID],users:[],replied_user:false});
   assert.ok(body.content.includes(`<@&${ROLE_ID}>`));
+});
+test('official HTML becomes readable Discord text and excerpts stay bounded', () => {
+  assert.equal(htmlToText('<p>첫 줄&nbsp;</p><p>둘째 &amp; 줄<br>끝</p><script>bad()</script>'), '첫 줄\n둘째 & 줄\n끝');
+  assert.ok(excerpt('가'.repeat(2000), 100).length <= 101);
+});
+test('Japanese translation rejects quota failures instead of posting untranslated text', async () => {
+  const ok = async () => ({ok:true,json:async()=>({responseStatus:200,quotaFinished:false,responseData:{translatedText:'번역'}})});
+  assert.equal(await translateJapanese('お知らせ', ok), '번역');
+  const quota = async () => ({ok:true,json:async()=>({responseStatus:200,quotaFinished:true,responseData:{translatedText:'x'}})});
+  await assert.rejects(translateJapanese('お知らせ', quota), /translation unavailable/);
 });
 test('invalid official feed fails rather than appearing as no new notices', () => {
   assert.throws(()=>parseItems(SOURCES[0],{}));
