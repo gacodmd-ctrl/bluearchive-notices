@@ -2,9 +2,16 @@ name: Blue Archive official notices
 
 on:
   schedule:
-    - cron: '23,53 * * * *'
+    # Separate checks: Korea at :01/:06/... and Japan at :03/:08/...
+    - cron: '1-56/5 * * * *'
+    - cron: '3-58/5 * * * *'
   workflow_dispatch:
     inputs:
+      region:
+        description: Official server to check
+        type: choice
+        options: [kr, jp]
+        default: kr
       send_test:
         description: Send one connection test with the Blue Archive role mention
         type: boolean
@@ -22,11 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check Korean and Japanese official notices
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SEND_TEST: ${{ inputs.send_test }}
+          REGION: ${{ github.event_name == 'workflow_dispatch' && inputs.region || (github.event.schedule == '1-56/5 * * * *' && 'kr' || 'jp') }}
         run: node notifier.mjs
       - name: Save delivery history even after partial failure
         if: always()
